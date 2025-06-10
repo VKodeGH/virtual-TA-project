@@ -68,8 +68,12 @@ app.post('/api', async (req, res) => {
 
     res.json({ answer, links: links.slice(0, 3) }); // Return top 3 links
   } catch (error) {
-    res.status(500).json({ error: "Failed to generate answer" });
-  }
+  console.error("API Error:", error.response?.data || error.message);
+  res.status(500).json({ 
+    error: "Failed to generate answer",
+    details: error.response?.data || error.message 
+  });
+}
 });
 
 // Export for Vercel
