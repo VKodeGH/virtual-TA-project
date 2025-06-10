@@ -5,14 +5,18 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Load environment variables
 const AI_PIPE_KEY = process.env.AI_PIPE_KEY;
-const contextSnippets = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', 'data', 'context_snippets.json'), 'utf-8')
-);
 
+// Load context snippets
+const contextSnippetsPath = path.join(__dirname, '..', 'data', 'context_snippets.json');
+const contextSnippets = JSON.parse(fs.readFileSync(contextSnippetsPath, 'utf-8'));
+
+// Generate answer using AI Pipe
 async function callAIPipe(question, context) {
   try {
     const response = await axios.post(
@@ -31,7 +35,7 @@ async function callAIPipe(question, context) {
           "Authorization": `Bearer ${AI_PIPE_KEY}`,
           "Content-Type": "application/json"
         },
-        timeout: 10000 // 10-second timeout
+        timeout: 10000
       }
     );
     return response.data.choices[0].message.content;
@@ -41,31 +45,28 @@ async function callAIPipe(question, context) {
   }
 }
 
+// Handle POST requests
 app.post('/api', async (req, res) => {
   try {
     const { question } = req.body;
-    console.log("Received question:", question);
-
-    // Find context
-    const matchedQuestion = contextSnippets.find(q => 
+    
+    // Find matching context
+    const matched = contextSnippets.find(q => 
       question.toLowerCase().includes(q.question.toLowerCase())
     );
-    const context = matchedQuestion ? matchedQuestion.contexts.join('\n') : '';
-    console.log("Matched context:", context);
-
-    // Call AI Pipe
+    const context = matched ? matched.contexts.join('\n') : '';
+    
+    // Generate answer
     const answer = await callAIPipe(question, context);
-    console.log("Generated answer:", answer);
-
+    
     // Extract links
+    const links = [];
     const urlRegex = /https?:\/\/[^\s)]+/g;
     const urls = context.match(urlRegex) || [];
-    const links = urls.slice(0, 3).map(url => ({ url, text: "Relevant discussion" }));
-    console.log("Links extracted:", links);
-
-    res.json({ answer, links });
+    urls.forEach(url => links.push({ url, text: "Relevant discussion" }));
+    
+    res.json({ answer, links: links.slice(0, 3) });
   } catch (error) {
-    console.error("Full error:", error);
     res.status(500).json({ 
       error: "Failed to generate answer",
       details: error.message 
@@ -73,5 +74,5 @@ app.post('/api', async (req, res) => {
   }
 });
 
-
+// Export for Vercel
 module.exports = app;
