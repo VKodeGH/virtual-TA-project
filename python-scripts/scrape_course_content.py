@@ -10,7 +10,7 @@ class TDSCourseScraper:
         # TDS course content repository
         self.base_url = "https://api.github.com/repos/sanand0/tools-in-data-science-public"
         self.raw_base_url = "https://raw.githubusercontent.com/sanand0/tools-in-data-science-public/main"
-        self.data_dir = "../data/course-content"
+        self.data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "course-content"))
         
     def get_all_markdown_files(self):
         """Get all .md files from the repository"""
@@ -46,16 +46,23 @@ class TDSCourseScraper:
             print(f"Error downloading {file_path}: {response.status_code}")
             return None
     
+    # In your existing TDSCourseScraper class
     def process_markdown_content(self, content, file_path):
         """Process and structure markdown content"""
+        # Remove .md extension and format URL
+        clean_path = file_path.replace('.md', '').replace(' ', '-')
+        course_url = f"https://tds.s-anand.net/#/{clean_path}"
+        
         return {
             'source': 'course_content',
             'file_path': file_path,
+            'url': course_url,  # Critical addition
             'content': content,
             'scraped_at': datetime.now().isoformat(),
             'word_count': len(content.split()),
             'type': 'course_material'
         }
+
     
     def scrape_all_content(self):
         """Main scraping function"""
@@ -82,6 +89,13 @@ class TDSCourseScraper:
         
         print(f"Scraped {len(all_content)} files")
         print(f"Data saved to: {output_file}")
+        
+        print(f"Final output path: {output_file}")  # Add this
+        print(f"Directory exists? {os.path.exists(os.path.dirname(output_file))}") 
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(all_content, f, indent=2, ensure_ascii=False)
+            print(f"Successfully wrote {len(all_content)} records")
         return all_content
 
 if __name__ == "__main__":

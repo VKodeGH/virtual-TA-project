@@ -3,76 +3,95 @@ const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const natural = require('natural');
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Load environment variables
-const AI_PIPE_KEY = process.env.AI_PIPE_KEY;
+// 1. Load Data
+const courseContent = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', 'data', 'course-content', 'course_content.json'), 'utf-8')
+);
+const discoursePosts = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', 'data', 'discourse-posts', 'discourse_posts.json'), 'utf-8')
+);
 
-// Load context snippets
-const contextSnippetsPath = path.join(__dirname, '..', 'data', 'context_snippets.json');
-const contextSnippets = JSON.parse(fs.readFileSync(contextSnippetsPath, 'utf-8'));
+// 2. Prepare combined documents for search
+const allDocs = [
+  ...courseContent.map(doc => ({
+    content: doc.content,
+    url: doc.url,
+    source: 'course'
+  })),
+  ...discoursePosts.map(post => ({
+    content: post.content,
+    url: post.post_url,
+    source: 'discourse'
+  }))
+];
 
-// Generate answer using AI Pipe
-async function callAIPipe(question, context) {
+// 3. Build TF-IDF vectorizer
+const tfidf = new natural.TfIdf();
+allDocs.forEach(doc => tfidf.addDocument(doc.content));
+
+// 4. Helper: Find top N relevant docs for a question
+function findRelevantDocs(question, topN = 3) {
+  const scores = [];
+  tfidf.tfidfs(question, (i, score) => scores.push({ i, score }));
+  scores.sort((a, b) => b.score - a.score);
+  return scores.slice(0, topN).map(s => allDocs[s.i]);
+}
+
+// 5. API endpoint
+app.post('/api', async (req, res) => {
   try {
+    const { question } = req.body;
+
+    // Find relevant docs
+    const relevantDocs = findRelevantDocs(question, 3);
+    const context = relevantDocs.map(d => d.content).join('\n');
+
+    // Extract links from relevant docs
+    const links = relevantDocs
+      .filter(d => d.url)
+      .map(d => ({
+        url: d.url,
+        text: d.source === 'course' ? 'Course Material' : 'Discourse Discussion'
+      }));
+
+    // Add extra instruction for bonus questions
+    const systemPrompt = question.toLowerCase().includes('bonus')
+      ? 'Always return bonus scores as a numerical total (e.g., 110), not fractions. '
+      : '';
+
+    // Call AI Pipe for answer
     const response = await axios.post(
       "https://aipipe.org/openrouter/v1/chat/completions",
       {
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You are a helpful TDS course TA." },
-          { role: "user", content: `Question: ${question}\nContext: ${context}` }
+          { role: "system", content: systemPrompt + "Use the following context to answer student questions:\n" + context },
+          { role: "user", content: question }
         ],
         max_tokens: 512,
-        temperature: 0.2
+        temperature: 0.1
       },
       {
         headers: {
-          "Authorization": `Bearer ${AI_PIPE_KEY}`,
+          "Authorization": `Bearer ${process.env.AI_PIPE_KEY}`,
           "Content-Type": "application/json"
-        },
-        timeout: 10000
+        }
       }
     );
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error("AI Pipe Error:", error.response?.data || error.message);
-    throw error;
-  }
-}
 
-// Handle POST requests
-app.post('/api', async (req, res) => {
-  try {
-    const { question } = req.body;
-    
-    // Find matching context
-    const matched = contextSnippets.find(q => 
-      question.toLowerCase().includes(q.question.toLowerCase())
-    );
-    const context = matched ? matched.contexts.join('\n') : '';
-    
-    // Generate answer
-    const answer = await callAIPipe(question, context);
-    
-    // Extract links
-    const links = [];
-    const urlRegex = /https?:\/\/[^\s)]+/g;
-    const urls = context.match(urlRegex) || [];
-    urls.forEach(url => links.push({ url, text: "Relevant discussion" }));
-    
-    res.json({ answer, links: links.slice(0, 3) });
-  } catch (error) {
-    res.status(500).json({ 
-      error: "Failed to generate answer",
-      details: error.message 
+    res.json({
+      answer: response.data.choices[0].message.content,
+      links: links.slice(0, 3)
     });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to generate answer", details: error.message });
   }
 });
 
-// Export for Vercel
 module.exports = app;
