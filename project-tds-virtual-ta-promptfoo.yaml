@@ -1,9 +1,7 @@
-description: "TDS Virtual TA Project Sample (but not the actual evaluation) Questions"
-
 providers:
   - id: https
     config:
-      url: https://virtual-ta-project-nine.vercel.app/api # Replace this with your API endpoint
+      url: 'your app url'
       method: POST
       headers:
         Content-Type: application/json
@@ -12,10 +10,32 @@ providers:
           "question": "{{ question }}"{% if image %},
           "image": "{{ image }}"{% endif %}
         }
+ 
+        }
       transformResponse: json
 
 # Ensure JSON schema
 defaultTest:
+  options:
+    provider:
+      id: https
+      config:
+        url: https://aiproxy.sanand.workers.dev/openai/v1/chat/completions
+        method: POST
+        headers:
+          Content-Type: application/json
+          Authorization: Bearer {{env.API_KEY}} # Replace with your token
+        body: |
+          {
+            "model": "gpt-4o-mini",
+            "messages": [
+              {"role": "system", "content": "You are an evaluator that checks if an output meets specific criteria. Analyze the output based on the given rubric and respond with a JSON object containing {\"reason\": \"your analysis\", \"score\": number between 0.0 and 1.0, \"pass\": true/false}."},
+              {"role": "user", "content": "Output to evaluate: {{ output }}\n\nRubric: {{ rubric }}"}
+            ],
+            "temperature": 0
+          }
+        transformResponse: json
+
   assert:
     - type: is-json
       value:
@@ -77,4 +97,4 @@ tests:
 writeLatestResults: true
 
 commandLineOptions:
-  cache: true
+  cache: false
