@@ -88,7 +88,7 @@ python-frontmatter==1.1.0
 python-multipart==0.0.20
 python-ulid==3.0.0
 pytz==2024.2
-pywin32==308; platform_system=="Windows"
+#pywin32==308; platform_system=="Windows"
 PyYAML==6.0.2
 pyzmq==26.2.0
 regex==2024.11.6
