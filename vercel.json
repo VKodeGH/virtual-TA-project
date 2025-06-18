@@ -1,15 +1,9 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.js": {
-      "maxDuration": 30
-    }
-  },
+  "builds": [
+    { "src": "api/main.py", "use": "@vercel/python" }
+  ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "api/index.js",
-      "methods": ["POST", "OPTIONS"]
-    }
+    { "src": "/(.*)", "dest": "api/main.py" }
   ]
 }
